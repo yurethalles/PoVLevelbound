@@ -1,0 +1,14 @@
+# Projetos de referência locais; não fazem parte do novo mod.
+/Arquivos/
+
+# Saídas intermediárias de compilação.
+**/bin/
+**/obj/
+/outputs/*.raw.dll
+/outputs/*.pdb
+
+# Arquivos de IDE e sistema.
+/.vs/
+*.user
+*.suo
+Thumbs.db

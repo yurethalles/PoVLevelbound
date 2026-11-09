@@ -1,0 +1,18 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <UsingTask AssemblyFile="C:\Users\Usuario\.nuget\packages\ilrepack.lib.msbuild.task\2.0.18.2\build\ILRepack.Lib.MSBuild.Task.dll" TaskName="ILRepack" />
+  <PropertyGroup>
+    <PoVLevelboundRaw Condition="'$(PoVLevelboundRaw)' == ''">$(MSBuildProjectDirectory)\outputs\PoVLevelbound.raw.dll</PoVLevelboundRaw>
+    <PoVLevelboundOutput Condition="'$(PoVLevelboundOutput)' == ''">$(MSBuildProjectDirectory)\outputs\PoVLevelbound.dll</PoVLevelboundOutput>
+  </PropertyGroup>
+  <Target Name="Pack">
+    <ItemGroup>
+      <InputAssemblies Include="$(PoVLevelboundRaw)" />
+      <InputAssemblies Include="$(MSBuildProjectDirectory)\ServerSync\bin\Release\ServerSync.dll" />
+    </ItemGroup>
+    <ItemGroup>
+      <LibraryPath Include="C:\Users\Usuario\AppData\Roaming\com.kesomannen.gale\valheim\profiles\Glitnir Northbound - Teste\BepInEx\core" />
+      <LibraryPath Include="C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed" />
+    </ItemGroup>
+    <ILRepack Parallel="true" DebugInfo="false" AllowDuplicateResources="true" Internalize="true" InputAssemblies="@(InputAssemblies)" LibraryPath="@(LibraryPath)" TargetKind="Dll" OutputFile="$(PoVLevelboundOutput)" />
+  </Target>
+</Project>

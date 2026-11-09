@@ -1,0 +1,8 @@
+{
+    "name": "PoVLevelbound",
+    "version_number": "1.1.0",
+    "description": "Vincula o acesso a itens, construções, recursos e altares ao nível do jogador no Path of Valheiman por bioma.",
+    "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2350"
+    ]
+}
