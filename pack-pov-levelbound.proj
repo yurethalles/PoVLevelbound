@@ -3,6 +3,8 @@
   <PropertyGroup>
     <PoVLevelboundRaw Condition="'$(PoVLevelboundRaw)' == ''">$(MSBuildProjectDirectory)\outputs\PoVLevelbound.raw.dll</PoVLevelboundRaw>
     <PoVLevelboundOutput Condition="'$(PoVLevelboundOutput)' == ''">$(MSBuildProjectDirectory)\outputs\PoVLevelbound.dll</PoVLevelboundOutput>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">C:\Users\Usuario\AppData\Roaming\com.kesomannen.gale\valheim\profiles\Glitnir Northbound - Teste\BepInEx\core</BepInExCore>
+    <ValheimManaged Condition="'$(ValheimManaged)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed</ValheimManaged>
   </PropertyGroup>
   <Target Name="Pack">
     <ItemGroup>
@@ -10,8 +12,8 @@
       <InputAssemblies Include="$(MSBuildProjectDirectory)\ServerSync\bin\Release\ServerSync.dll" />
     </ItemGroup>
     <ItemGroup>
-      <LibraryPath Include="C:\Users\Usuario\AppData\Roaming\com.kesomannen.gale\valheim\profiles\Glitnir Northbound - Teste\BepInEx\core" />
-      <LibraryPath Include="C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed" />
+      <LibraryPath Include="$(BepInExCore)" />
+      <LibraryPath Include="$(ValheimManaged)" />
     </ItemGroup>
     <ILRepack Parallel="true" DebugInfo="false" AllowDuplicateResources="true" Internalize="true" InputAssemblies="@(InputAssemblies)" LibraryPath="@(LibraryPath)" TargetKind="Dll" OutputFile="$(PoVLevelboundOutput)" />
   </Target>

@@ -11,8 +11,8 @@
     <Optimize>true</Optimize>
     <DebugType>none</DebugType>
     <OutputPath>..\outputs\</OutputPath>
-    <ValheimManaged>C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed</ValheimManaged>
-    <BepInExCore>C:\Users\Usuario\AppData\Roaming\com.kesomannen.gale\valheim\profiles\Glitnir Northbound - Teste\BepInEx\core</BepInExCore>
+    <ValheimManaged Condition="'$(ValheimManaged)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed</ValheimManaged>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">C:\Users\Usuario\AppData\Roaming\com.kesomannen.gale\valheim\profiles\Glitnir Northbound - Teste\BepInEx\core</BepInExCore>
     <ServerSyncBin>..\ServerSync\bin\Release</ServerSyncBin>
   </PropertyGroup>
   <ItemGroup>
