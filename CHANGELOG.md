@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 — 9 de novembro de 2026
+
+### Alterado
+
+- O nível é obtido pela mesma via do PoVMonsterLevels (`PassiveTree.Progress.Peek`) com fallback seguro para `pt.level`.
+- Os níveis padrão agora acompanham a curva recomendada do Path of Valheiman; Deep North usa 200, o máximo padrão alcançável do PoV.
+- Ocean recebeu uma regra de nível própria, alinhada a Mistlands.
+- Regras YAML são geradas automaticamente uma vez na primeira execução.
+
+### Corrigido
+
+- O mod exige Path of Valheiman, impedindo uma instalação que deixaria jogadores no nível zero.
+- A RPC de bloqueio usa um nome exclusivo e não conflita com o Levelbound antigo.
+
 ## 1.1.0 — 8 de novembro de 2026
 
 ### Adicionado

@@ -31,7 +31,7 @@
 > [!NOTE]
 > Este mod foi desenvolvido para o servidor **[Glitnir](https://discord.gg/g-l-i-t-n-i-r-848339987174785054)**.
 
-PoV Levelbound lê arquivos YAML de configuração que mapeiam prefabs do jogo a um **bioma de progressão**. Cada bioma tem um nível mínimo do Path of Valheiman exigido (configurável). Quando um jogador tenta realizar uma ação com um prefab listado e **não possui o nível suficiente**, a ação é bloqueada e uma mensagem de feedback é exibida.
+PoV Levelbound lê arquivos YAML de configuração que mapeiam prefabs do jogo a um **bioma de progressão**. Cada bioma tem um nível mínimo do Path of Valheiman exigido (configurável). Quando um jogador tenta realizar uma ação com um prefab listado e **não possui o nível suficiente**, a ação é bloqueada e uma mensagem de feedback é exibida. O Path of Valheiman é obrigatório.
 
 ### Ações que podem ser bloqueadas
 
@@ -54,13 +54,14 @@ O mod segue a ordem de progressão do Valheim vanilla. Os níveis padrão são:
 | Bioma | Nível padrão |
 |---|---|
 | Meadows | 1 |
-| Black Forest | 10 |
-| Swamp | 20 |
-| Mountain | 30 |
-| Plains | 40 |
-| Mistlands | 50 |
-| AshLands | 60 |
-| Deep North | 70 |
+| Black Forest | 19 |
+| Swamp | 43 |
+| Mountain | 77 |
+| Plains | 97 |
+| Mistlands | 130 |
+| Ocean | 130 |
+| AshLands | 181 |
+| Deep North | 200 |
 
 Os níveis são configuráveis na seção `[Biome Levels]` do arquivo CFG e são sincronizados com todos os clientes pelo servidor.
 
@@ -199,7 +200,7 @@ O arquivo `BepInEx/config/Dorn.PoVLevelbound.cfg` é gerado automaticamente e si
 | `LockConfiguration` | `true` | Impede que clientes sobrescrevam a configuração do servidor |
 | `AdminBypass` | `true` | Administradores e o host ignoram todas as restrições |
 | `GenerateEquipableItemList` | `false` | Gera `todos-itens-equipaveis.yml` uma vez (somente referência) |
-| `GenerateFilesAutomatically` | `false` | Preenche os YAMLs automaticamente com prefabs do jogo e mods |
+| `GenerateFilesAutomatically` | `true` | Preenche os YAMLs automaticamente uma vez e então se desativa; reative após adicionar mods |
 | `DiagnosticMode` | `false` | Loga regras carregadas e receitas não resolvidas no console |
 
 ### `[Biome Levels]`

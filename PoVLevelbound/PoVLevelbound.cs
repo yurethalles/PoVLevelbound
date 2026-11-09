@@ -11,19 +11,20 @@ using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
-[assembly: AssemblyInformationalVersion("1.1.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyInformationalVersion("1.2.0")]
 
 namespace PoVLevelbound
 {
     [BepInPlugin(Guid, Name, Version)]
+    [BepInDependency("treextr.pathofvalheiman", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.1.0";
-        internal const string BlockedRpc = "Levelbound_Blocked";
+            Version = "1.2.0";
+        internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
         const string SyncedEquipmentKey = "equipamentos.yml";
@@ -48,6 +49,7 @@ namespace PoVLevelbound
             Heightmap.Biome.Mountain,
             Heightmap.Biome.Plains,
             Heightmap.Biome.Mistlands,
+            Heightmap.Biome.Ocean,
             Heightmap.Biome.AshLands,
             Heightmap.Biome.DeepNorth,
         };
@@ -97,6 +99,8 @@ namespace PoVLevelbound
             configWatcher;
         Coroutine debounceCoroutine;
         DateTime lastConfigReload = DateTime.MinValue;
+        MethodInfo povProgressPeek;
+        FieldInfo povProgressLevel;
         bool defaultsGenerated;
         float nextItemMessage;
         string Folder
@@ -317,8 +321,8 @@ namespace PoVLevelbound
             generateDefaults = Bind(
                 "General",
                 "GenerateFilesAutomatically",
-                false,
-                "Fills materials, equipment and build pieces registered by the game and mods."
+                true,
+                "Generates rules once on the server, then turns itself off. Re-enable it to regenerate rules after adding content mods."
             );
             Config.Remove(new ConfigDefinition("Geral", "GerarPadroesVanillaAutomaticamente"));
             diagnostic = Bind(
@@ -350,13 +354,14 @@ namespace PoVLevelbound
                 "Minimum interval in seconds between blocked-action messages."
             );
             AddGlobalLevel("Meadows", Heightmap.Biome.Meadows, 1);
-            AddGlobalLevel("BlackForest", Heightmap.Biome.BlackForest, 10);
-            AddGlobalLevel("Swamp", Heightmap.Biome.Swamp, 20);
-            AddGlobalLevel("Mountain", Heightmap.Biome.Mountain, 30);
-            AddGlobalLevel("Plains", Heightmap.Biome.Plains, 40);
-            AddGlobalLevel("Mistlands", Heightmap.Biome.Mistlands, 50);
-            AddGlobalLevel("AshLands", Heightmap.Biome.AshLands, 60);
-            AddGlobalLevel("DeepNorth", Heightmap.Biome.DeepNorth, 70);
+            AddGlobalLevel("BlackForest", Heightmap.Biome.BlackForest, 19);
+            AddGlobalLevel("Swamp", Heightmap.Biome.Swamp, 43);
+            AddGlobalLevel("Mountain", Heightmap.Biome.Mountain, 77);
+            AddGlobalLevel("Plains", Heightmap.Biome.Plains, 97);
+            AddGlobalLevel("Mistlands", Heightmap.Biome.Mistlands, 130);
+            AddGlobalLevel("Ocean", Heightmap.Biome.Ocean, 130);
+            AddGlobalLevel("AshLands", Heightmap.Biome.AshLands, 181);
+            AddGlobalLevel("DeepNorth", Heightmap.Biome.DeepNorth, 200);
             RemoveLegacyConfig();
             Sync.AddLockingConfigEntry(locked);
         }
@@ -791,23 +796,29 @@ namespace PoVLevelbound
         }
 
         // Path of Valheiman persists the character level in Player.m_customData.
-        // Unlike PoV's convenience API, this exists for every Player on a
-        // dedicated server as well as for the local client.
+        // PoVMonsterLevels reads PassiveTree.Progress.Peek(player).Level first;
+        // the persisted value below is the safe fallback while PoV initializes.
         const string PoVLevelKey = "pt.level";
 
         internal int Level(Player player = null)
         {
             Player target = player ?? Player.m_localPlayer;
-            if (target == null || target.m_customData == null)
+            if (target == null)
                 return 0;
             try
             {
-                string value;
                 int level;
-                return target.m_customData.TryGetValue(PoVLevelKey, out value)
+                if (TryPoVProgressLevel(target, out level))
+                    return level;
+
+                string value;
+                return target.m_customData != null
+                    && target.m_customData.TryGetValue(PoVLevelKey, out value)
                     && int.TryParse(value, out level)
                     ? Math.Max(1, level)
-                    : 0;
+                    // PoV starts every new character at level one. Its custom
+                    // data can be populated a few frames after Player spawn.
+                    : 1;
             }
             catch
             {
@@ -815,6 +826,53 @@ namespace PoVLevelbound
                 // An unavailable value must never bypass a level requirement.
                 return 0;
             }
+        }
+
+        bool TryPoVProgressLevel(Player player, out int level)
+        {
+            level = 0;
+            try
+            {
+                if (povProgressPeek == null || povProgressLevel == null)
+                {
+                    Type progress = null;
+                    foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        progress = assembly.GetType("PassiveTree.Progress", false);
+                        if (progress != null)
+                            break;
+                    }
+                    if (progress == null)
+                        return false;
+                    povProgressPeek = progress.GetMethod(
+                        "Peek",
+                        BindingFlags.Public | BindingFlags.Static,
+                        null,
+                        new[] { typeof(Player) },
+                        null
+                    );
+                    povProgressLevel = progress.GetField(
+                        "Level",
+                        BindingFlags.Public | BindingFlags.Instance
+                    );
+                }
+                object progressState = povProgressPeek == null
+                    ? null
+                    : povProgressPeek.Invoke(null, new object[] { player });
+                object rawLevel = progressState == null || povProgressLevel == null
+                    ? null
+                    : povProgressLevel.GetValue(progressState);
+                if (rawLevel is int)
+                {
+                    level = Math.Max(1, (int)rawLevel);
+                    return true;
+                }
+            }
+            catch
+            {
+                // The persisted PoV value remains available as a fallback.
+            }
+            return false;
         }
 
         internal bool Bypass(Player player = null)
@@ -1705,6 +1763,10 @@ namespace PoVLevelbound
                 debounceCoroutine = null;
             }
             LoadRules();
+            // Automatic generation is intentionally a one-shot operation. It
+            // remains available by setting GenerateFilesAutomatically to true.
+            generateDefaults.Value = false;
+            Config.Save();
             Logger.LogInfo(
                 "Automatic file generation completed: +"
                     + materialMappings.Count
