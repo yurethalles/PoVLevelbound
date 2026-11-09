@@ -11,9 +11,9 @@ using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
-[assembly: AssemblyInformationalVersion("1.2.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
 
 namespace PoVLevelbound
 {
@@ -23,7 +23,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.2.0";
+            Version = "1.0.0";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -2323,16 +2323,10 @@ namespace PoVLevelbound
         }
     }
 
-    // Intercepts the drag-and-drop swap that happens when a locked item from the
-    // chest is dragged onto an unlocked item in the player's inventory.  In that
-    // scenario Valheim executes two MoveItemToThis calls:
-    //   1. player-item  → chest   (allowed by BlockContainerTransfer)
-    //   2. locked-item  → player  (should be blocked)
-    // Because call 1 runs before call 2, blocking only call 2 leaves the player
-    // with an empty slot (their item already moved to the chest).  The fix is to
-    // intercept OnSelectedItem *before* either call runs and reject the entire
-    // operation when the dragged item is a locked chest item being dropped onto
-    // an occupied player-inventory slot.
+    // A drag-and-drop swap between the player inventory and a chest runs as two
+    // separate moves.  If the chest item is locked, blocking only its second move
+    // is too late: the player's item may already have been removed.  Validate the
+    // item that would enter the player inventory before either move starts.
     [HarmonyPatch(typeof(InventoryGui), "OnSelectedItem")]
     class DragSwapBlockPatch
     {
@@ -2360,8 +2354,7 @@ namespace PoVLevelbound
             if (Plugin.Instance == null || DragItem == null || DragInventory == null || CurrentContainer == null)
                 return true;
 
-            // Only intercept when we are dropping a dragged item (m_dragItem != null)
-            // onto an occupied slot in the player's inventory.
+            // A swap is possible only when a dragged item is dropped on an occupied slot.
             ItemDrop.ItemData draggedItem = DragItem.GetValue(__instance) as ItemDrop.ItemData;
             if (draggedItem == null || item == null || draggedItem == item)
                 return true;
@@ -2371,21 +2364,35 @@ namespace PoVLevelbound
             if (player == null || draggedFrom == null)
                 return true;
 
-            // The dragged item must come from the currently open chest.
             Container container = CurrentContainer.GetValue(__instance) as Container;
-            if (container == null || draggedFrom != container.GetInventory())
+            if (container == null || grid == null)
                 return true;
 
-            // The drop target must be in the player's own inventory.
-            if (grid == null || grid.GetInventory() != player.GetInventory())
-                return true;
+            Inventory playerInventory = player.GetInventory();
+            Inventory chestInventory = container.GetInventory();
+            ItemDrop.ItemData incomingItem;
 
-            // Check whether the dragged (chest) item is locked for this player.
+            if (draggedFrom == playerInventory && grid.GetInventory() == chestInventory)
+            {
+                // Player dragged their item over an occupied chest slot. The item
+                // already in that chest slot would be moved into the player inventory.
+                incomingItem = item;
+            }
+            else if (draggedFrom == chestInventory && grid.GetInventory() == playerInventory)
+            {
+                // Chest item dragged over an occupied player slot.
+                incomingItem = draggedItem;
+            }
+            else
+            {
+                return true;
+            }
+
+            // Cancel the entire swap before Valheim moves either item.
             int requirement;
-            if (!Plugin.Instance.ItemLevelLocked(draggedItem, out requirement, player))
+            if (!Plugin.Instance.ItemLevelLocked(incomingItem, out requirement, player))
                 return true;
 
-            // The swap would bypass the pickup restriction — cancel the whole operation.
             Plugin.Instance.Tell(player, requirement);
             return false;
         }

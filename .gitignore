@@ -7,6 +7,9 @@
 /outputs/*.raw.dll
 /outputs/*.pdb
 
+# Pacotes de distribuição publicados fora do repositório.
+/release/
+
 # Arquivos de IDE e sistema.
 /.vs/
 *.user
