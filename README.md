@@ -20,6 +20,7 @@ Clients and server must use the same Path of Valheiman version.
 - Blocks interaction with world resources such as ores, trees, rocks, and pickables.
 - Blocks activation of boss altars.
 - Shows level requirements in item tooltips, recipes, building-piece descriptions, and altar hover text.
+- When Marketplace and Server NPCs Revamped is installed, hovering over an item in the buy or sell list shows the native Path of Valheiman item tooltip, including configured level requirements.
 - Displays a configurable message when a player attempts a blocked action.
 - Prevents item loss during inventory-to-chest swaps when the chest item is level-locked.
 - Synchronizes configuration and YAML rules from the server to all connected clients.

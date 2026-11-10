@@ -11,9 +11,9 @@ using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 namespace PoVLevelbound
 {
@@ -23,7 +23,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.0.0";
+            Version = "1.0.1";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -152,6 +152,7 @@ namespace PoVLevelbound
             StartCoroutine(InstallPathOfValheimanTooltipPatch());
             StartCoroutine(InstallMarketplaceTooltipPatch());
             StartCoroutine(InstallMarketplacePurchasePatches());
+            StartCoroutine(InstallMarketplaceListHover());
             ValidateReflectionFields();
             StartCoroutine(GenerateDefaultsWhenReady());
             Logger.LogInfo("Levelbound " + Version + " loaded.");
@@ -270,6 +271,42 @@ namespace PoVLevelbound
                 yield return null;
             }
             Logger.LogDebug("Levelbound: Marketplace purchase protection was not installed because Marketplace was not detected.");
+        }
+
+        IEnumerator InstallMarketplaceListHover()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type ui = AccessTools.TypeByName("Marketplace.Modules.MainMarketplace.Marketplace_UI");
+                Type pov = AccessTools.TypeByName("PassiveTree.UI.ItemTooltip");
+                Type utils = AccessTools.TypeByName("Marketplace.Utils");
+                if (ui != null && pov != null && utils != null)
+                {
+                    try
+                    {
+                        MethodInfo forItem = AccessTools.Method(pov, "ForItem", new[] { typeof(GameObject), typeof(ItemDrop.ItemData) });
+                        MethodInfo makeItem = AccessTools.Method(utils, "GetItemForTooltip", new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(string), typeof(byte), typeof(Action<ItemDrop.ItemData>) });
+                        MethodInfo buy = AccessTools.Method(ui, "CreateBuyGameObjects");
+                        MethodInfo sell = AccessTools.Method(ui, "CreateSellGameObjects");
+                        if (forItem == null || makeItem == null || buy == null || sell == null)
+                        {
+                            Logger.LogWarning("Levelbound: Marketplace list hover unavailable: compatible methods not found.");
+                            yield break;
+                        }
+                        MarketplaceListHover.Initialize(ui, forItem, makeItem);
+                        Harmony harmony = new Harmony(Guid + ".MarketplaceListHover");
+                        harmony.Patch(buy, postfix: new HarmonyMethod(AccessTools.Method(typeof(MarketplaceListHover), "BuyPostfix")));
+                        harmony.Patch(sell, postfix: new HarmonyMethod(AccessTools.Method(typeof(MarketplaceListHover), "SellPostfix")));
+                        Logger.LogInfo("Levelbound: Marketplace list hover enabled.");
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogWarning("Levelbound: Marketplace list hover could not be installed: " + e);
+                    }
+                    yield break;
+                }
+                yield return null;
+            }
         }
 
         void OnDestroy()
@@ -2055,6 +2092,91 @@ namespace PoVLevelbound
             if (string.IsNullOrEmpty(requirement) || text.IndexOf(requirement, StringComparison.OrdinalIgnoreCase) >= 0)
                 return;
             useHint.SetValue(__result, string.IsNullOrEmpty(text) ? requirement : text + "\n" + requirement);
+        }
+    }
+
+    // Bind each visible Marketplace row to PoV's native item tooltip. The
+    // Marketplace rebuilds these rows on pagination, search and tab changes.
+    class MarketplaceListHover
+    {
+        static Type ui;
+        static MethodInfo forItem, makeItem;
+
+        internal static void Initialize(Type marketplaceUi, MethodInfo nativeTooltip, MethodInfo createItem)
+        {
+            ui = marketplaceUi;
+            forItem = nativeTooltip;
+            makeItem = createItem;
+        }
+
+        static object Read(object target, string name)
+        {
+            if (target == null) return null;
+            Type type = target.GetType();
+            PropertyInfo property = AccessTools.Property(type, name);
+            if (property != null) return property.GetValue(target, null);
+            FieldInfo field = AccessTools.Field(type, name);
+            return field == null ? null : field.GetValue(target);
+        }
+
+        static void BuyPostfix() { BindRows(true); }
+        static void SellPostfix() { BindRows(false); }
+
+        static void BindRows(bool buying)
+        {
+            try
+            {
+                var rows = AccessTools.Field(ui, "CurrentGameObjects")?.GetValue(null) as System.Collections.IList;
+                var data = AccessTools.Field(ui, buying ? "ServerMarketSendDataSORTED" : "InventorySellDataSORTED")?.GetValue(null) as System.Collections.IList;
+                FieldInfo pageField = AccessTools.Field(ui, "CurrentPage");
+                if (rows == null || data == null || pageField == null || ObjectDB.instance == null)
+                    return;
+                int first = (int)pageField.GetValue(null) * 14;
+                int rowIndex = 0;
+                for (int index = first; index < data.Count && index < first + 14 && rowIndex < rows.Count; ++index)
+                {
+                    object entry = data[index];
+                    string prefab = Read(entry, "ItemPrefab") as string;
+                    GameObject itemPrefab = string.IsNullOrEmpty(prefab) ? null : ObjectDB.instance.GetItemPrefab(prefab);
+                    // Invalid sale entries are skipped during list creation; buy
+                    // entries retain a visible error row.
+                    if (!buying && (itemPrefab == null || itemPrefab.GetComponent<ItemDrop>() == null))
+                        continue;
+                    GameObject row = rows[rowIndex++] as GameObject;
+                    if (row == null || itemPrefab == null || itemPrefab.GetComponent<ItemDrop>() == null)
+                        continue;
+                    try
+                    {
+                        ItemDrop.ItemData item = null;
+                        Action<ItemDrop.ItemData> capture = value => item = value;
+                        makeItem.Invoke(null, new object[] {
+                            prefab, Convert.ToInt32(Read(entry, "Count")), Convert.ToInt32(Read(entry, "Quality")),
+                            Convert.ToInt32(Read(entry, "Variant")), Convert.ToInt64(Read(entry, "CrafterID")),
+                            Read(entry, "CrafterName") as string ?? "", Read(entry, "CUSTOMdata") as string ?? "{}",
+                            Convert.ToByte(Read(entry, "DurabilityPercent")), capture
+                        });
+                        if (item != null)
+                        {
+                            // Marketplace constructs a temporary clone. Preserve the
+                            // listing's exact prefab identity for YAML rule lookups;
+                            // some prefabs do not populate m_dropPrefab themselves.
+                            item.m_dropPrefab = itemPrefab;
+                            forItem.Invoke(null, new object[] { row, item });
+                        }
+                    }
+                    catch (Exception error)
+                    {
+                        Exception cause = error.InnerException ?? error;
+                        if (Plugin.Instance != null)
+                            Plugin.Instance.Warn("Levelbound: Marketplace hover skipped " + prefab + ": " + cause.Message);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                if (Plugin.Instance != null)
+                    Plugin.Instance.Warn("Levelbound: Marketplace hover setup failed: " + error.Message);
+            }
         }
     }
 
