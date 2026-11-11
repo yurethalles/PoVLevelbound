@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 — November 11, 2026
+
+- Fixed administrator bypass checks for remote players on dedicated servers.
+- Level requirements remain visible to administrators while bypass is enabled.
+
 ## 1.0.3 — November 11, 2026
 
 - Added a local setting that hides the Path of Valheiman Discord button in the main menu by default.

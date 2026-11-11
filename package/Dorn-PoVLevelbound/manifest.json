@@ -1,8 +1,10 @@
 {
     "name": "PoVLevelbound",
-    "version_number": "1.0.3",
-    "description": "Vincula o acesso a itens, construções, recursos e altares ao nível do jogador no Path of Valheiman por bioma.",
+    "version_number": "1.0.4",
+    "website_url": "",
+    "description": "Links items, equipment, building pieces, world resources, and boss altars to the player's Path of Valheiman level.",
     "dependencies": [
-    "denikson-BepInExPack_Valheim-5.4.2350"
+    "denikson-BepInExPack_Valheim-5.4.2360",
+    "treextr-PathOfValheiman-6.0.8"
     ]
 }

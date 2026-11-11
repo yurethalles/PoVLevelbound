@@ -5,14 +5,15 @@ PoV Levelbound is a Valheim progression mod that ties access to game content to 
 ## Requirements
 
 - Valheim
-- BepInEx 5
-- Path of Valheiman 6.0.5 or a compatible version, installed on both the server and every client
+- BepInExPack Valheim 5.4.2360 or newer
+- Path of Valheiman 6.0.8 or newer, installed on both the server and every client
 
 Clients and server must use the same Path of Valheiman version.
 
 ## Features
 
 - Blocks pickup of items when the required level has not been reached.
+- Blocks taking restricted items from containers, including individual transfers and the take-all action.
 - Blocks crafting and upgrading restricted items.
 - Blocks equipping weapons, tools, armor, ammunition, and accessories.
 - Blocks consumption of configured items.
@@ -21,6 +22,7 @@ Clients and server must use the same Path of Valheiman version.
 - Blocks activation of boss altars.
 - Shows level requirements in item tooltips, recipes, building-piece descriptions, and altar hover text.
 - When Marketplace and Server NPCs Revamped is installed, hovering over an item in the buy or sell list shows the native Path of Valheiman item tooltip, including configured level requirements.
+- Blocks purchases of items that the player cannot pick up because of their level.
 - Displays a configurable message when a player attempts a blocked action.
 - Prevents item loss during inventory-to-chest swaps when the chest item is level-locked.
 - Synchronizes configuration and YAML rules from the server to all connected clients.
@@ -52,9 +54,23 @@ Path of Valheiman is required. PoV Levelbound will not run without it.
 
 ## Configuration
 
-`Dorn.PoVLevelbound.cfg` controls the required level for each biome and allows each restriction group to be enabled or disabled independently: pickup, crafting, equipment, consumption, building, resources, and altars. It also provides synchronized switches for the Ragn stall, Haldor's finds, Wanderer, and Sigrid encounters, plus a configurable allow-list of Path of Valheiman commands retained in the F5 console. Console commands still require `devcommands`. The main-menu Discord button from Path of Valheiman is hidden by default and can optionally use a validated HTTPS Discord invite URL set locally by each player.
+`Dorn.PoVLevelbound.cfg` controls the required level for each biome. Pickup, crafting, upgrading, equipping, consuming, placement, repair, removal, resources, and altars each have their own restriction switch.
+
+The server can also configure the blocked-action message and the minimum interval between messages. The placeholders `{required}` and `{current}` insert the required and current player levels. The older `{nivel}` and `{atual}` placeholders are also supported.
+
+### Path of Valheiman options
+
+The synchronized encounter switches control new Ragn stalls, Haldor's Path of Valheiman finds, the Wanderer, and Sigrid. Disabling Ragn does not remove stalls that already exist.
+
+The `Commands` setting lists the Path of Valheiman commands to retain in the F5 console. Commands still require `devcommands`; the configuration description identifies additional development commands that should only be enabled with care.
+
+The Path of Valheiman Discord button is hidden in the main menu by default. `ShowPoVDiscordButton` controls its visibility and takes effect after a restart. `PoVDiscordButtonUrl` can replace the destination with an HTTPS `discord.gg` or `discord.com/invite` link; leave it empty to use the original destination. These interface settings are local to each player.
+
+### Rule generation and diagnostics
 
 On its first run, `GenerateFilesAutomatically` creates initial rules in the YAML files and then disables itself. Enable it again after adding mods that introduce new items or building pieces.
+
+`GenerateEquipableItemList` creates `todos-itens-equipaveis.yml` as a reference list grouped by source. The reference list is not applied as rules or synchronized; copy entries into the appropriate rule files. To regenerate it, delete the existing reference file and restart with the setting enabled. `DiagnosticMode` adds information about loaded rules and unresolved recipes to the log.
 
 ### YAML Files
 
@@ -66,7 +82,14 @@ The YAML files are stored in `BepInEx/config/PoVLevelbound/`:
 - `recursos.yml`: trees, rocks, ores, and other world resources.
 - `altares.yml`: specific requirements for boss altars.
 
-Each entry is assigned to a biome. The configured level for that biome becomes its minimum requirement.
+In the first four files, each prefab is assigned to a biome, and the configured level for that biome becomes its minimum requirement. For example:
+
+```yaml
+Swamp:
+  - Iron
+```
+
+`Reference` and `Unclassified` sections do not apply restrictions. Altars instead use direct prefab-to-level entries in `altares.yml`, such as `Bonemass: 20`; the key can identify the altar/location or its associated boss prefab.
 
 ## Multiplayer Synchronization
 
@@ -74,7 +97,7 @@ The server is the source of truth for configuration and YAML rules. Clients auto
 
 ## Notes
 
-- `AdminBypass` allows administrators to ignore restrictions when enabled.
+- `AdminBypass` allows administrators to ignore restrictions when enabled; level requirements remain visible in the interface.
 - Set a biome or altar level to `0` to disable its requirement.
 - Configuration and YAML changes are reloaded by the mod while it is running.
 - Back up YAML files before making broad progression changes.

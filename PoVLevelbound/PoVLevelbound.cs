@@ -11,9 +11,9 @@ using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: AssemblyVersion("1.0.3.0")]
-[assembly: AssemblyFileVersion("1.0.3.0")]
-[assembly: AssemblyInformationalVersion("1.0.3")]
+[assembly: AssemblyVersion("1.0.4.0")]
+[assembly: AssemblyFileVersion("1.0.4.0")]
+[assembly: AssemblyInformationalVersion("1.0.4")]
 
 namespace PoVLevelbound
 {
@@ -23,7 +23,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.0.3";
+            Version = "1.0.4";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -1260,9 +1260,23 @@ namespace PoVLevelbound
             if (player == null || player == Player.m_localPlayer)
                 return ZNet.instance == null || ZNet.instance.LocalPlayerIsAdminOrHost();
 
-            // Dedicated servers can validate a remote administrator by that
-            // player's name; LocalPlayerIsAdminOrHost cannot do this.
-            return ZNet.instance != null && ZNet.instance.IsAdmin(player.GetPlayerName());
+            // IsAdmin expects the network/platform ID supplied by the peer's
+            // socket, not the in-game character name. Match the Player with
+            // its peer through the character's network ID, then let Valheim
+            // perform its normal dedicated-server admin-list lookup.
+            ZNet net = ZNet.instance;
+            if (net == null)
+                return false;
+            ZDOID characterId = player.GetZDOID();
+            if (characterId == ZDOID.None)
+                return false;
+            foreach (ZNetPeer peer in net.GetPeers())
+            {
+                if (peer == null || peer.m_characterID != characterId || peer.m_socket == null)
+                    continue;
+                return net.IsAdmin(peer.m_socket.GetHostName());
+            }
+            return false;
         }
 
         int RequiredLevel(Heightmap.Biome biome)
@@ -1435,6 +1449,9 @@ namespace PoVLevelbound
 
         internal string RequirementText(ItemDrop.ItemData item, ActionKind action, string prefabOverride = null)
         {
+            // This is deliberately independent of Bypass(). Administrators
+            // must see the same progression information as other players;
+            // Bypass only affects whether an action is blocked.
             bool enabled = action == ActionKind.Craft ? blockCraft.Value
                 : action == ActionKind.Upgrade ? blockUpgrade.Value
                 : action == ActionKind.Equip ? blockEquip.Value
