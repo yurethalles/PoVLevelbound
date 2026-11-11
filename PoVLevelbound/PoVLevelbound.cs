@@ -11,9 +11,9 @@ using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
-[assembly: AssemblyInformationalVersion("1.0.1")]
+[assembly: AssemblyVersion("1.0.3.0")]
+[assembly: AssemblyFileVersion("1.0.3.0")]
+[assembly: AssemblyInformationalVersion("1.0.3")]
 
 namespace PoVLevelbound
 {
@@ -23,7 +23,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.0.1";
+            Version = "1.0.3";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -90,9 +90,18 @@ namespace PoVLevelbound
             blockRepair,
             blockRemoval,
             blockResources,
-            blockAltars;
+            blockAltars,
+            enableRagn,
+            enableHaldorFinds,
+            enableWanderer,
+            enableSigrid;
         ConfigEntry<string> blockedActionMessage;
         ConfigEntry<float> blockedActionCooldown;
+        ConfigEntry<string> enabledPoVCommands;
+        ConfigEntry<bool> showPoVDiscordButton;
+        ConfigEntry<string> poVDiscordButtonUrl;
+        HashSet<string> releaseCommandsAdded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> releaseCommandsKept;
         readonly Dictionary<Heightmap.Biome, ConfigEntry<int>> globalLevels =
             new Dictionary<Heightmap.Biome, ConfigEntry<int>>();
         FileSystemWatcher watcher,
@@ -150,6 +159,10 @@ namespace PoVLevelbound
             DebouncedLoad();
             new Harmony(Guid).PatchAll();
             StartCoroutine(InstallPathOfValheimanTooltipPatch());
+            StartCoroutine(InstallPathOfValheimanTunablesPatch());
+            StartCoroutine(InstallPathOfValheimanReleaseCommands());
+            StartCoroutine(InstallPathOfValheimanMenuDiscordPatch());
+            StartCoroutine(InstallPathOfValheimanDiscordLinkPatch());
             StartCoroutine(InstallMarketplaceTooltipPatch());
             StartCoroutine(InstallMarketplacePurchasePatches());
             StartCoroutine(InstallMarketplaceListHover());
@@ -196,6 +209,196 @@ namespace PoVLevelbound
                 yield return null;
             }
             Logger.LogDebug("Levelbound: Path of Valheiman was not detected; using vanilla tooltips.");
+        }
+
+        // PoV keeps encounter switches in the passive-tree JSON rather than in
+        // BepInEx config. Intercept the public getter so our synchronized
+        // server settings win after every tree reload or update.
+        IEnumerator InstallPathOfValheimanTunablesPatch()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type tunablesType = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    tunablesType = assembly.GetType("PassiveTree.Tunables", false);
+                    if (tunablesType != null)
+                        break;
+                }
+                if (tunablesType != null)
+                {
+                    MethodInfo of = AccessTools.Method(
+                        tunablesType,
+                        "Of",
+                        new[] { typeof(string) }
+                    );
+                    MethodInfo postfix = AccessTools.Method(
+                        typeof(PathOfValheimanTunablesPatch),
+                        "Postfix"
+                    );
+                    if (of != null && postfix != null)
+                    {
+                        new Harmony(Guid + ".PathOfValheimanTunables").Patch(
+                            of,
+                            postfix: new HarmonyMethod(postfix)
+                        );
+                        Logger.LogInfo("Levelbound: Path of Valheiman encounter controls enabled.");
+                    }
+                    yield break;
+                }
+                yield return null;
+            }
+            Logger.LogDebug("Levelbound: Path of Valheiman tunables were not detected.");
+        }
+
+        IEnumerator InstallPathOfValheimanReleaseCommands()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type commandsType = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    commandsType = assembly.GetType("PassiveTree.ReleaseCommands", false);
+                    if (commandsType != null)
+                        break;
+                }
+                if (commandsType != null)
+                {
+                    FieldInfo field = commandsType.GetField(
+                        "Kept",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+                    );
+                    releaseCommandsKept = field == null
+                        ? null
+                        : field.GetValue(null) as HashSet<string>;
+                    if (releaseCommandsKept != null)
+                    {
+                        ApplyPathOfValheimanReleaseCommands();
+                        yield break;
+                    }
+                    break;
+                }
+                yield return null;
+            }
+            Logger.LogWarning("Levelbound: Path of Valheiman release-command list was not detected.");
+        }
+
+        IEnumerator InstallPathOfValheimanMenuDiscordPatch()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type menuPatchType = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    menuPatchType = FindType(
+                        assembly,
+                        "PassiveTree.UI.MenuDiscord+FejdStartup_Start_Discord"
+                    );
+                    if (menuPatchType != null)
+                        break;
+                }
+                if (menuPatchType != null)
+                {
+                    MethodInfo originalPostfix = AccessTools.Method(menuPatchType, "Postfix");
+                    MethodInfo prefix = AccessTools.Method(
+                        typeof(PathOfValheimanMenuDiscordPatch),
+                        "Prefix"
+                    );
+                    if (originalPostfix != null && prefix != null)
+                    {
+                        new Harmony(Guid + ".PathOfValheimanMenuDiscord").Patch(
+                            originalPostfix,
+                            prefix: new HarmonyMethod(prefix)
+                        );
+                        Logger.LogInfo("Levelbound: Path of Valheiman Discord-menu control enabled.");
+                    }
+                    yield break;
+                }
+                yield return null;
+            }
+            Logger.LogDebug("Levelbound: Path of Valheiman Discord-menu patch was not detected.");
+        }
+
+        IEnumerator InstallPathOfValheimanDiscordLinkPatch()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type discordLinkType = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    discordLinkType = FindType(assembly, "PassiveTree.DiscordLink");
+                    if (discordLinkType != null)
+                        break;
+                }
+                if (discordLinkType != null)
+                {
+                    MethodInfo open = AccessTools.Method(
+                        discordLinkType,
+                        "Open",
+                        new[] { typeof(string) }
+                    );
+                    MethodInfo prefix = AccessTools.Method(
+                        typeof(PathOfValheimanDiscordLinkPatch),
+                        "Prefix"
+                    );
+                    if (open != null && prefix != null)
+                    {
+                        new Harmony(Guid + ".PathOfValheimanDiscordLink").Patch(
+                            open,
+                            prefix: new HarmonyMethod(prefix)
+                        );
+                        Logger.LogInfo("Levelbound: Path of Valheiman Discord-link override enabled.");
+                    }
+                    yield break;
+                }
+                yield return null;
+            }
+            Logger.LogDebug("Levelbound: Path of Valheiman Discord-link was not detected.");
+        }
+
+        static Type FindType(Assembly assembly, string fullName)
+        {
+            Type type = assembly.GetType(fullName, false);
+            if (type != null)
+                return type;
+            try
+            {
+                foreach (Type candidate in assembly.GetTypes())
+                    if (candidate != null && candidate.FullName == fullName)
+                        return candidate;
+            }
+            catch (ReflectionTypeLoadException e)
+            {
+                foreach (Type candidate in e.Types)
+                    if (candidate != null && candidate.FullName == fullName)
+                        return candidate;
+            }
+            return null;
+        }
+
+        void ApplyPathOfValheimanReleaseCommands()
+        {
+            if (releaseCommandsKept == null || enabledPoVCommands == null)
+                return;
+
+            foreach (string command in releaseCommandsAdded)
+                releaseCommandsKept.Remove(command);
+            releaseCommandsAdded.Clear();
+
+            foreach (string raw in enabledPoVCommands.Value.Split(','))
+            {
+                string command = raw.Trim().ToLowerInvariant();
+                if (
+                    command.StartsWith("pt_", StringComparison.Ordinal)
+                    && releaseCommandsKept.Add(command)
+                )
+                    releaseCommandsAdded.Add(command);
+            }
+            Logger.LogInfo(
+                "Levelbound: Path of Valheiman console commands kept ("
+                + releaseCommandsAdded.Count + "): "
+                + string.Join(", ", new List<string>(releaseCommandsAdded).ToArray())
+            );
         }
 
         IEnumerator InstallMarketplaceTooltipPatch()
@@ -378,6 +581,55 @@ namespace PoVLevelbound
             blockRemoval = Bind("Building Restrictions", "BlockRemoval", true, "Blocks removing pieces listed in construcoes.yml.");
             blockResources = Bind("Resource Restrictions", "BlockResources", true, "Blocks resources listed in recursos.yml.");
             blockAltars = Bind("Altar Restrictions", "BlockAltars", true, "Blocks altars listed in altares.yml.");
+            enableRagn = Bind(
+                "Path of Valheiman Encounters",
+                "EnableRagn",
+                true,
+                "Allows new Ragn stalls to generate. Existing stalls are not removed."
+            );
+            enableHaldorFinds = Bind(
+                "Path of Valheiman Encounters",
+                "EnableHaldorFinds",
+                true,
+                "Allows Haldor's Path of Valheiman finds to generate."
+            );
+            enableWanderer = Bind(
+                "Path of Valheiman Encounters",
+                "EnableWanderer",
+                true,
+                "Allows the Path of Valheiman Wanderer encounter to generate."
+            );
+            enableSigrid = Bind(
+                "Path of Valheiman Encounters",
+                "EnableSigrid",
+                true,
+                "Allows the Path of Valheiman Sigrid encounter to generate."
+            );
+            enabledPoVCommands = Bind(
+                "Path of Valheiman Console",
+                "Commands",
+                "pt_level,pt_xp,pt_points,pt_craft_level,pt_reset,pt_craft_respec,"
+                + "pt_info,pt_craft_info,pt_xp_by,pt_stars,pt_dummy,"
+                + "pt_ragn,pt_sigrid,pt_wanderer,pt_monolith_count",
+                "Comma-separated Path of Valheiman commands to retain in the F5 console. "
+                + "They still require devcommands. Do not add pt_dev, pt_free, pt_give, "
+                + "pt_monolith, pt_char_build, pt_enchanttest, or pt_resetall unless you understand their effects."
+            );
+            enabledPoVCommands.SettingChanged += (sender, args) => ApplyPathOfValheimanReleaseCommands();
+            showPoVDiscordButton = Config.Bind(
+                "Interface",
+                "ShowPoVDiscordButton",
+                false,
+                "Shows Path of Valheiman's Discord button in the main menu. This setting is local and takes effect after restarting the game."
+            );
+            poVDiscordButtonUrl = Config.Bind(
+                "Interface",
+                "PoVDiscordButtonUrl",
+                "",
+                "Optional replacement URL for the Path of Valheiman Discord button. Leave blank to use the original URL. Only HTTPS discord.gg and discord.com/invite links are accepted."
+            );
+            poVDiscordButtonUrl.SettingChanged += (sender, args) => ValidatePoVDiscordButtonUrl(true);
+            ValidatePoVDiscordButtonUrl(false);
             blockedActionMessage = Bind(
                 "Messages",
                 "BlockedActionMessage",
@@ -411,6 +663,91 @@ namespace PoVLevelbound
                 level,
                 "Minimum Path of Valheiman level for " + name + ". Use 0 to disable."
             );
+        }
+
+        internal bool SuppressPoVTunable(string id)
+        {
+            if (string.Equals(id, "ragn.chance", StringComparison.Ordinal))
+                return !enableRagn.Value;
+            if (
+                string.Equals(id, "finds.count-min", StringComparison.Ordinal)
+                || string.Equals(id, "finds.count-max", StringComparison.Ordinal)
+            )
+                return !enableHaldorFinds.Value;
+            if (string.Equals(id, "wanderer.on", StringComparison.Ordinal))
+                return !enableWanderer.Value;
+            if (string.Equals(id, "sigrid.on", StringComparison.Ordinal))
+                return !enableSigrid.Value;
+            return false;
+        }
+
+        internal bool ShowPoVDiscordButton
+        {
+            get { return showPoVDiscordButton != null && showPoVDiscordButton.Value; }
+        }
+
+        internal bool TryGetPoVDiscordButtonUrl(string requestedUrl, out string replacementUrl)
+        {
+            replacementUrl = null;
+            if (
+                !ShowPoVDiscordButton
+                || !string.Equals(
+                    requestedUrl,
+                    "https://discord.gg/XZsYRF2YtQ",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+                return false;
+
+            Uri uri;
+            string configuredUrl = poVDiscordButtonUrl == null ? "" : poVDiscordButtonUrl.Value;
+            if (!TryValidateDiscordInviteUrl(configuredUrl, out uri))
+                return false;
+            replacementUrl = uri.AbsoluteUri;
+            return true;
+        }
+
+        void ValidatePoVDiscordButtonUrl(bool logWarning)
+        {
+            if (poVDiscordButtonUrl == null || string.IsNullOrWhiteSpace(poVDiscordButtonUrl.Value))
+                return;
+            Uri ignored;
+            if (!TryValidateDiscordInviteUrl(poVDiscordButtonUrl.Value, out ignored) && logWarning)
+                Logger.LogWarning(
+                    "Levelbound: PoVDiscordButtonUrl is invalid. Use an HTTPS discord.gg invite or discord.com/invite link; the original PoV URL will be used."
+                );
+        }
+
+        static bool TryValidateDiscordInviteUrl(string value, out Uri uri)
+        {
+            uri = null;
+            if (!Uri.TryCreate(value == null ? "" : value.Trim(), UriKind.Absolute, out Uri parsed))
+                return false;
+            if (
+                !string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                || (!parsed.IsDefaultPort && parsed.Port != 443)
+            )
+                return false;
+
+            string host = parsed.Host;
+            if (string.Equals(host, "discord.gg", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parsed.AbsolutePath.Trim('/').Length == 0)
+                    return false;
+            }
+            else if (
+                (string.Equals(host, "discord.com", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(host, "www.discord.com", StringComparison.OrdinalIgnoreCase))
+                && parsed.AbsolutePath.StartsWith("/invite/", StringComparison.OrdinalIgnoreCase)
+                && parsed.AbsolutePath.Substring("/invite/".Length).Trim('/').Length > 0
+            )
+            {
+            }
+            else
+                return false;
+
+            uri = parsed;
+            return true;
         }
 
         void RemoveLegacyConfig()
@@ -1909,6 +2246,46 @@ namespace PoVLevelbound
         {
             if (Plugin.Instance != null)
                 Plugin.Instance.Generate(ObjectDB.instance);
+        }
+    }
+
+    // Installed by reflection because Path of Valheiman is intentionally not a
+    // compile-time reference of Levelbound. See InstallPathOfValheimanTunablesPatch.
+    class PathOfValheimanTunablesPatch
+    {
+        static void Postfix(string __0, ref float __result)
+        {
+            if (Plugin.Instance != null && Plugin.Instance.SuppressPoVTunable(__0))
+                __result = 0f;
+        }
+    }
+
+    // Installed by reflection because Path of Valheiman is intentionally not a
+    // compile-time reference of Levelbound. See InstallPathOfValheimanMenuDiscordPatch.
+    class PathOfValheimanMenuDiscordPatch
+    {
+        static bool Prefix()
+        {
+            return Plugin.Instance == null || Plugin.Instance.ShowPoVDiscordButton;
+        }
+    }
+
+    // Replaces only the PoV main-menu Discord invite. Other PoV Discord links
+    // retain their original destinations.
+    class PathOfValheimanDiscordLinkPatch
+    {
+        static bool Prefix(string __0)
+        {
+            string replacementUrl;
+            if (
+                Plugin.Instance != null
+                && Plugin.Instance.TryGetPoVDiscordButtonUrl(__0, out replacementUrl)
+            )
+            {
+                Application.OpenURL(replacementUrl);
+                return false;
+            }
+            return true;
         }
     }
 

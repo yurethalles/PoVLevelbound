@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.3 — November 11, 2026
+
+- Added a local setting that hides the Path of Valheiman Discord button in the main menu by default.
+- Added optional replacement of that button's destination, limited to validated HTTPS Discord invite URLs.
+
+## 1.0.2 — November 11, 2026
+
+- Added synchronized controls for Path of Valheiman encounters: Ragn stalls, Haldor's finds, the Wanderer, and Sigrid.
+- Added a configurable allow-list of Path of Valheiman commands retained in the F5 console, including the selected administrator commands.
+
 ## 1.0.1 — November 10, 2026
 
 - Added native Path of Valheiman item tooltips when hovering over Marketplace buy and sell listings.

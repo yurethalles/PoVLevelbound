@@ -52,7 +52,7 @@ Path of Valheiman is required. PoV Levelbound will not run without it.
 
 ## Configuration
 
-`Dorn.PoVLevelbound.cfg` controls the required level for each biome and allows each restriction group to be enabled or disabled independently: pickup, crafting, equipment, consumption, building, resources, and altars.
+`Dorn.PoVLevelbound.cfg` controls the required level for each biome and allows each restriction group to be enabled or disabled independently: pickup, crafting, equipment, consumption, building, resources, and altars. It also provides synchronized switches for the Ragn stall, Haldor's finds, Wanderer, and Sigrid encounters, plus a configurable allow-list of Path of Valheiman commands retained in the F5 console. Console commands still require `devcommands`. The main-menu Discord button from Path of Valheiman is hidden by default and can optionally use a validated HTTPS Discord invite URL set locally by each player.
 
 On its first run, `GenerateFilesAutomatically` creates initial rules in the YAML files and then disables itself. Enable it again after adding mods that introduce new items or building pieces.
 
