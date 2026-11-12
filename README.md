@@ -6,7 +6,7 @@ PoV Levelbound is a Valheim progression mod that ties access to game content to 
 
 - Valheim
 - BepInExPack Valheim 5.4.2360 or newer
-- Path of Valheiman 6.0.8 or newer, installed on both the server and every client
+- Path of Valheiman 6.0.9 or newer, installed on both the server and every client
 
 Clients and server must use the same Path of Valheiman version.
 
@@ -22,7 +22,8 @@ Clients and server must use the same Path of Valheiman version.
 - Blocks activation of boss altars.
 - Shows level requirements in item tooltips, recipes, building-piece descriptions, and altar hover text.
 - When Marketplace and Server NPCs Revamped is installed, hovering over an item in the buy or sell list shows the native Path of Valheiman item tooltip, including configured level requirements.
-- Blocks purchases of items that the player cannot pick up because of their level.
+- When VNEI is installed, its item and building-piece tooltips include configured level requirements, and its crafting tab is aligned with the Path of Valheiman interface.
+- Disables the Marketplace buy button for items restricted by the player's level and checks again before currency is deducted. This protection runs on the client and does not validate direct requests from modified clients.
 - Displays a configurable message when a player attempts a blocked action.
 - Prevents item loss during inventory-to-chest swaps when the chest item is level-locked.
 - Synchronizes configuration and YAML rules from the server to all connected clients.
@@ -60,7 +61,7 @@ The server can also configure the blocked-action message and the minimum interva
 
 ### Path of Valheiman options
 
-The synchronized encounter switches control new Ragn stalls, Haldor's Path of Valheiman finds, the Wanderer, and Sigrid. Disabling Ragn does not remove stalls that already exist.
+The synchronized encounter switches control new Ragn stalls, Haldor's Path of Valheiman finds, the Wanderer, Sigrid, and Altars of Power. Disabling Ragn does not remove stalls that already exist. Setting `EnablePowerAltars = false` prevents new Altars of Power and blocks offerings at existing altars. It does not remove altars or reset previously accumulated monster power; the existing reset interaction remains available.
 
 The `Commands` setting lists the Path of Valheiman commands to retain in the F5 console. Commands still require `devcommands`; the configuration description identifies additional development commands that should only be enabled with care.
 
@@ -70,7 +71,7 @@ The Path of Valheiman Discord button is hidden in the main menu by default. `Sho
 
 On its first run, `GenerateFilesAutomatically` creates initial rules in the YAML files and then disables itself. Enable it again after adding mods that introduce new items or building pieces.
 
-`GenerateEquipableItemList` creates `todos-itens-equipaveis.yml` as a reference list grouped by source. The reference list is not applied as rules or synchronized; copy entries into the appropriate rule files. To regenerate it, delete the existing reference file and restart with the setting enabled. `DiagnosticMode` adds information about loaded rules and unresolved recipes to the log.
+`GenerateEquipableItemList` creates `todos-itens-equipaveis.yml` as a reference list grouped by source. The reference list is not applied as rules or synchronized; copy entries into the appropriate rule files. To regenerate it, delete the existing reference file and restart with the setting enabled. `DiagnosticMode` adds information about loaded rules, unresolved recipes, and administrator bypass decisions to the log. Bypass diagnostics are rate-limited.
 
 ### YAML Files
 

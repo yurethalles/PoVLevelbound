@@ -10,10 +10,11 @@ using HarmonyLib;
 using ServerSync;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
-[assembly: AssemblyVersion("1.0.4.0")]
-[assembly: AssemblyFileVersion("1.0.4.0")]
-[assembly: AssemblyInformationalVersion("1.0.4")]
+[assembly: AssemblyVersion("1.0.6.0")]
+[assembly: AssemblyFileVersion("1.0.6.0")]
+[assembly: AssemblyInformationalVersion("1.0.6")]
 
 namespace PoVLevelbound
 {
@@ -23,7 +24,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.0.4";
+            Version = "1.0.6";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -94,7 +95,8 @@ namespace PoVLevelbound
             enableRagn,
             enableHaldorFinds,
             enableWanderer,
-            enableSigrid;
+            enableSigrid,
+            enablePowerAltars;
         ConfigEntry<string> blockedActionMessage;
         ConfigEntry<float> blockedActionCooldown;
         ConfigEntry<string> enabledPoVCommands;
@@ -112,6 +114,7 @@ namespace PoVLevelbound
         FieldInfo povProgressLevel;
         bool defaultsGenerated;
         float nextItemMessage;
+        float nextBypassDiagnostic;
         string Folder
         {
             get { return Path.Combine(Paths.ConfigPath, "PoVLevelbound"); }
@@ -160,12 +163,14 @@ namespace PoVLevelbound
             new Harmony(Guid).PatchAll();
             StartCoroutine(InstallPathOfValheimanTooltipPatch());
             StartCoroutine(InstallPathOfValheimanTunablesPatch());
+            StartCoroutine(InstallPowerAltarProtection());
             StartCoroutine(InstallPathOfValheimanReleaseCommands());
             StartCoroutine(InstallPathOfValheimanMenuDiscordPatch());
             StartCoroutine(InstallPathOfValheimanDiscordLinkPatch());
             StartCoroutine(InstallMarketplaceTooltipPatch());
             StartCoroutine(InstallMarketplacePurchasePatches());
             StartCoroutine(InstallMarketplaceListHover());
+            StartCoroutine(InstallVneiCompatibility());
             ValidateReflectionFields();
             StartCoroutine(GenerateDefaultsWhenReady());
             Logger.LogInfo("Levelbound " + Version + " loaded.");
@@ -249,6 +254,41 @@ namespace PoVLevelbound
                 yield return null;
             }
             Logger.LogDebug("Levelbound: Path of Valheiman tunables were not detected.");
+        }
+
+        IEnumerator InstallPowerAltarProtection()
+        {
+            for (int frame = 0; frame < 300; ++frame)
+            {
+                Type altar = null;
+                Type power = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (altar == null)
+                        altar = assembly.GetType("PassiveTree.PowerAltar+Altar", false);
+                    if (power == null)
+                        power = assembly.GetType("PassiveTree.MonsterPower", false);
+                }
+                if (altar != null && power != null)
+                {
+                    MethodInfo useItem = AccessTools.Method(altar, "UseItem");
+                    MethodInfo receiveOffer = AccessTools.Method(power, "ReceiveOffer");
+                    if (useItem == null || receiveOffer == null)
+                    {
+                        Logger.LogWarning("Levelbound: Power Altar protection could not find the expected PoV methods.");
+                        yield break;
+                    }
+                    Harmony harmony = new Harmony(Guid + ".PowerAltarProtection");
+                    harmony.Patch(useItem, prefix: new HarmonyMethod(
+                        AccessTools.Method(typeof(PowerAltarProtection), "UseItemPrefix")));
+                    harmony.Patch(receiveOffer, prefix: new HarmonyMethod(
+                        AccessTools.Method(typeof(PowerAltarProtection), "ReceiveOfferPrefix")));
+                    Logger.LogInfo("Levelbound: Power Altar protection installed.");
+                    yield break;
+                }
+                yield return null;
+            }
+            Logger.LogWarning("Levelbound: Power Altar protection could not find the PoV types.");
         }
 
         IEnumerator InstallPathOfValheimanReleaseCommands()
@@ -448,27 +488,21 @@ namespace PoVLevelbound
             for (int frame = 0; frame < 300; ++frame)
             {
                 Type clientType = null;
-                Type serverType = null;
                 foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
                 {
                     if (clientType == null)
                         clientType = assembly.GetType("Marketplace.Modules.MainMarketplace.Marketplace_UI", false);
-                    if (serverType == null)
-                        serverType = assembly.GetType("Marketplace.Modules.MainMarketplace.Marketplace_Main_Server", false);
                 }
-                if (clientType != null && serverType != null)
+                if (clientType != null)
                 {
                     Harmony harmony = new Harmony(Guid + ".MarketplacePurchase");
                     MethodInfo buy = AccessTools.Method(clientType, "BUYITEMCLICK");
                     MethodInfo select = AccessTools.Method(clientType, "OnClickBUYItem");
-                    MethodInfo request = AccessTools.Method(serverType, "RequestBuyItem");
                     if (buy != null)
                         harmony.Patch(buy, prefix: new HarmonyMethod(AccessTools.Method(typeof(MarketplacePurchasePatch), "ClientBuyPrefix")));
                     if (select != null)
                         harmony.Patch(select, postfix: new HarmonyMethod(AccessTools.Method(typeof(MarketplacePurchasePatch), "ClientSelectionPostfix")));
-                    if (request != null)
-                        harmony.Patch(request, prefix: new HarmonyMethod(AccessTools.Method(typeof(MarketplacePurchasePatch), "ServerBuyPrefix")));
-                    Logger.LogInfo("Levelbound: Marketplace purchase protection enabled.");
+                    Logger.LogInfo("Levelbound: Marketplace client purchase protection enabled.");
                     yield break;
                 }
                 yield return null;
@@ -478,11 +512,15 @@ namespace PoVLevelbound
 
         IEnumerator InstallMarketplaceListHover()
         {
-            for (int frame = 0; frame < 300; ++frame)
+            for (int attempt = 0; attempt < 30; ++attempt)
             {
-                Type ui = AccessTools.TypeByName("Marketplace.Modules.MainMarketplace.Marketplace_UI");
-                Type pov = AccessTools.TypeByName("PassiveTree.UI.ItemTooltip");
-                Type utils = AccessTools.TypeByName("Marketplace.Utils");
+                Type ui = null, pov = null, utils = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (ui == null) ui = assembly.GetType("Marketplace.Modules.MainMarketplace.Marketplace_UI", false);
+                    if (pov == null) pov = assembly.GetType("PassiveTree.UI.ItemTooltip", false);
+                    if (utils == null) utils = assembly.GetType("Marketplace.Utils", false);
+                }
                 if (ui != null && pov != null && utils != null)
                 {
                     try
@@ -508,7 +546,52 @@ namespace PoVLevelbound
                     }
                     yield break;
                 }
-                yield return null;
+                yield return new WaitForSecondsRealtime(1f);
+            }
+        }
+
+        IEnumerator InstallVneiCompatibility()
+        {
+            for (int attempt = 0; attempt < 30; ++attempt)
+            {
+                Assembly vnei = null;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    if (string.Equals(assembly.GetName().Name, "VNEI", StringComparison.OrdinalIgnoreCase))
+                    {
+                        vnei = assembly;
+                        break;
+                    }
+                Type item = vnei == null ? null : vnei.GetType("VNEI.Logic.Item", false);
+                Type display = vnei == null ? null : vnei.GetType("VNEI.UI.DisplayItem", false);
+                Type handler = vnei == null ? null : vnei.GetType("VNEI.UI.MainVneiHandler", false);
+                if (item != null && display != null && handler != null)
+                {
+                    try
+                    {
+                        MethodInfo tooltip = AccessTools.Method(item, "GetTooltip", new[] { typeof(int) });
+                        MethodInfo setItem = AccessTools.Method(display, "SetItem");
+                        MethodInfo tab = AccessTools.Method(handler, "UpdateTabPosition");
+                        MethodInfo getTab = AccessTools.Method(handler, "GetTabButton");
+                        if (tooltip == null || setItem == null || tab == null || getTab == null)
+                        {
+                            Logger.LogWarning("Levelbound: VNEI compatibility unavailable: expected methods not found.");
+                            yield break;
+                        }
+                        VneiCompatibility.Initialize(item, display, handler, tooltip);
+                        Harmony harmony = new Harmony(Guid + ".VNEI");
+                        harmony.Patch(tooltip, postfix: new HarmonyMethod(AccessTools.Method(typeof(VneiCompatibility), "TooltipPostfix")));
+                        harmony.Patch(setItem, postfix: new HarmonyMethod(AccessTools.Method(typeof(VneiCompatibility), "DisplayPostfix")));
+                        harmony.Patch(tab, prefix: new HarmonyMethod(AccessTools.Method(typeof(VneiCompatibility), "PositionPrefix")));
+                        harmony.Patch(getTab, postfix: new HarmonyMethod(AccessTools.Method(typeof(VneiCompatibility), "TabCreatedPostfix")));
+                        Logger.LogInfo("Levelbound: VNEI compatibility enabled.");
+                    }
+                    catch (Exception error)
+                    {
+                        Logger.LogWarning("Levelbound: VNEI compatibility could not be installed: " + error.Message);
+                    }
+                    yield break;
+                }
+                yield return new WaitForSecondsRealtime(1f);
             }
         }
 
@@ -569,7 +652,7 @@ namespace PoVLevelbound
                 "General",
                 "DiagnosticMode",
                 false,
-                "Logs loaded rules and unresolved recipes."
+                "Logs loaded rules, unresolved recipes, and periodic administrator bypass diagnostics."
             );
             blockPickup = Bind("Item Restrictions", "BlockPickup", true, "Blocks picking up items listed in materiais.yml and equipamentos.yml.");
             blockCraft = Bind("Item Restrictions", "BlockCrafting", true, "Blocks crafting items listed in materiais.yml and equipamentos.yml.");
@@ -604,6 +687,12 @@ namespace PoVLevelbound
                 "EnableSigrid",
                 true,
                 "Allows the Path of Valheiman Sigrid encounter to generate."
+            );
+            enablePowerAltars = Bind(
+                "Path of Valheiman Encounters",
+                "EnablePowerAltars",
+                true,
+                "Allows new Altars of Power and trophy offerings. Off prevents new altars and blocks offerings at existing ones; existing monster power can still be reset at an altar."
             );
             enabledPoVCommands = Bind(
                 "Path of Valheiman Console",
@@ -678,7 +767,14 @@ namespace PoVLevelbound
                 return !enableWanderer.Value;
             if (string.Equals(id, "sigrid.on", StringComparison.Ordinal))
                 return !enableSigrid.Value;
+            if (string.Equals(id, "monster-power.altars-per-biome", StringComparison.Ordinal))
+                return !enablePowerAltars.Value;
             return false;
+        }
+
+        internal bool PowerAltarsEnabled
+        {
+            get { return enablePowerAltars == null || enablePowerAltars.Value; }
         }
 
         internal bool ShowPoVDiscordButton
@@ -1252,31 +1348,50 @@ namespace PoVLevelbound
         internal bool Bypass(Player player = null)
         {
             if (!admin.Value)
-                return false;
+                return BypassResult(false, "disabled");
 
-            // LocalPlayerIsAdminOrHost is a local-client query. It must never
-            // be used to approve an arbitrary remote player on a dedicated
-            // server.
+            // On a client, use only the admin status validated and sent by the
+            // connected server. IsAdmin also treats the source of truth as an
+            // admin, so require a completed server sync and a non-source client.
             if (player == null || player == Player.m_localPlayer)
-                return ZNet.instance == null || ZNet.instance.LocalPlayerIsAdminOrHost();
+            {
+                ZNet localNet = ZNet.instance;
+                if (localNet == null || localNet.IsServer())
+                    return BypassResult(true, "local host");
+                bool serverValidatedAdmin = Sync.InitialSyncDone && !Sync.IsSourceOfTruth && Sync.IsAdmin;
+                return BypassResult(serverValidatedAdmin, "server-validated client status");
+            }
 
             // IsAdmin expects the network/platform ID supplied by the peer's
             // socket, not the in-game character name. Match the Player with
             // its peer through the character's network ID, then let Valheim
             // perform its normal dedicated-server admin-list lookup.
             ZNet net = ZNet.instance;
-            if (net == null)
-                return false;
+            if (net == null || !net.IsServer())
+                return BypassResult(false, "remote player without server authority");
             ZDOID characterId = player.GetZDOID();
             if (characterId == ZDOID.None)
-                return false;
+                return BypassResult(false, "remote character ID unavailable");
             foreach (ZNetPeer peer in net.GetPeers())
             {
                 if (peer == null || peer.m_characterID != characterId || peer.m_socket == null)
                     continue;
-                return net.IsAdmin(peer.m_socket.GetHostName());
+                return BypassResult(net.IsAdmin(peer.m_socket.GetHostName()), "server peer admin list");
             }
-            return false;
+            return BypassResult(false, "remote peer not found");
+        }
+
+        bool BypassResult(bool result, string reason)
+        {
+            if (diagnostic.Value && Time.time >= nextBypassDiagnostic)
+            {
+                nextBypassDiagnostic = Time.time + 10f;
+                Logger.LogInfo("AdminBypass diagnostic: enabled=" + admin.Value
+                    + ", granted=" + result + ", reason=" + reason
+                    + ", syncComplete=" + Sync.InitialSyncDone
+                    + ", sourceOfTruth=" + Sync.IsSourceOfTruth);
+            }
+            return result;
         }
 
         int RequiredLevel(Heightmap.Biome biome)
@@ -1342,7 +1457,7 @@ namespace PoVLevelbound
         )
         {
             requirement = 0;
-            if (Bypass(player))
+            if (!blockPickup.Value || Bypass(player))
                 return false;
             Heightmap.Biome biome;
             if (!ItemRule(item, out biome))
@@ -2277,6 +2392,24 @@ namespace PoVLevelbound
         }
     }
 
+    class PowerAltarProtection
+    {
+        static bool UseItemPrefix(ref bool __result)
+        {
+            if (Plugin.Instance == null || Plugin.Instance.PowerAltarsEnabled)
+                return true;
+            __result = false;
+            if (Player.m_localPlayer != null)
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "Altars of Power are disabled on this server.");
+            return false;
+        }
+
+        static bool ReceiveOfferPrefix()
+        {
+            return Plugin.Instance == null || Plugin.Instance.PowerAltarsEnabled;
+        }
+    }
+
     // Installed by reflection because Path of Valheiman is intentionally not a
     // compile-time reference of Levelbound. See InstallPathOfValheimanMenuDiscordPatch.
     class PathOfValheimanMenuDiscordPatch
@@ -2487,6 +2620,133 @@ namespace PoVLevelbound
                 return;
             useHint.SetValue(__result, string.IsNullOrEmpty(text) ? requirement : text + "\n" + requirement);
         }
+    }
+
+    // VNEI caches its base tooltip by quality. Add the live requirement after
+    // its cache lookup, and refresh the displayed text on pointer entry.
+    class VneiCompatibility
+    {
+        static FieldInfo prefabField, displayItemField, displayQualityField, displayTooltipField, tabField;
+        static PropertyInfo knownProperty;
+        static MethodInfo tooltipMethod;
+        static Button positionedTab;
+        static readonly Vector3[] tabCorners = new Vector3[4], craftCorners = new Vector3[4], upgradeCorners = new Vector3[4];
+
+        internal static void Initialize(Type item, Type display, Type handler, MethodInfo tooltip)
+        {
+            prefabField = AccessTools.Field(item, "prefab");
+            knownProperty = AccessTools.Property(item, "IsKnown");
+            displayItemField = AccessTools.Field(display, "item");
+            displayQualityField = AccessTools.Field(display, "quality");
+            displayTooltipField = AccessTools.Field(display, "uiTooltip");
+            tabField = AccessTools.Field(handler, "vneiTab");
+            tooltipMethod = tooltip;
+        }
+
+        static void TooltipPostfix(object __instance, ref string __result)
+        {
+            if (Plugin.Instance == null || __instance == null || __result == null || prefabField == null)
+                return;
+            GameObject prefab = prefabField.GetValue(__instance) as GameObject;
+            if (prefab == null)
+                return;
+            ItemDrop drop = prefab.GetComponent<ItemDrop>();
+            if (drop != null && drop.m_itemData != null && drop.m_itemData.m_shared != null)
+            {
+                Plugin.ActionKind action = drop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Consumable
+                    ? Plugin.ActionKind.Consume : Plugin.ActionKind.Equip;
+                Plugin.Instance.AppendRequirement(ref __result, drop.m_itemData, action, prefab.name);
+                return;
+            }
+            Piece piece = prefab.GetComponent<Piece>();
+            if (piece != null)
+            {
+                string requirement = Plugin.Instance.ConstructionRequirementText(piece);
+                if (!string.IsNullOrEmpty(requirement) && __result.IndexOf(requirement.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+                    __result += requirement;
+            }
+        }
+
+        static void DisplayPostfix(Component __instance)
+        {
+            if (__instance == null || displayTooltipField == null)
+                return;
+            UITooltip tooltip = displayTooltipField.GetValue(__instance) as UITooltip;
+            if (tooltip == null)
+                return;
+            VneiHoverRefresh refresh = tooltip.GetComponent<VneiHoverRefresh>();
+            if (refresh == null)
+                refresh = tooltip.gameObject.AddComponent<VneiHoverRefresh>();
+            refresh.display = __instance;
+        }
+
+        internal static void Refresh(Component display)
+        {
+            if (display == null || displayItemField == null || displayQualityField == null
+                || displayTooltipField == null || knownProperty == null || tooltipMethod == null)
+                return;
+            try
+            {
+                object item = displayItemField.GetValue(display);
+                UITooltip tooltip = displayTooltipField.GetValue(display) as UITooltip;
+                if (item == null || tooltip == null || !(bool)knownProperty.GetValue(item, null))
+                    return;
+                string text = tooltipMethod.Invoke(item, new[] { displayQualityField.GetValue(display) }) as string;
+                if (text != null)
+                    tooltip.m_text = text;
+            }
+            catch (Exception error)
+            {
+                if (Plugin.Instance != null)
+                    Plugin.Instance.Warn("Levelbound: VNEI tooltip refresh failed: " + error.Message);
+            }
+        }
+
+        static void TabCreatedPostfix(object __instance)
+        {
+            if (__instance == null || tabField == null)
+                return;
+            Button button = tabField.GetValue(__instance) as Button;
+            if (button != null && button != positionedTab)
+            {
+                positionedTab = button;
+                TryPosition(button);
+            }
+        }
+
+        static bool PositionPrefix(object __instance)
+        {
+            if (__instance == null || tabField == null)
+                return true;
+            return !TryPosition(tabField.GetValue(__instance) as Button);
+        }
+
+        static bool TryPosition(Button button)
+        {
+            InventoryGui gui = InventoryGui.instance;
+            if (button == null || gui == null || gui.m_tabCraft == null || gui.m_tabUpgrade == null)
+                return false;
+            RectTransform tab = button.transform as RectTransform;
+            RectTransform craft = gui.m_tabCraft.transform as RectTransform;
+            RectTransform upgrade = gui.m_tabUpgrade.transform as RectTransform;
+            if (tab == null || craft == null || upgrade == null || tab.parent != upgrade.parent || craft.parent != upgrade.parent)
+                return false;
+            tab.GetWorldCorners(tabCorners);
+            craft.GetWorldCorners(craftCorners);
+            upgrade.GetWorldCorners(upgradeCorners);
+            float gap = Mathf.Max(0f, upgradeCorners[0].x - craftCorners[2].x);
+            float deltaX = upgradeCorners[2].x + gap - tabCorners[0].x;
+            float deltaY = (upgradeCorners[0].y + upgradeCorners[2].y - tabCorners[0].y - tabCorners[2].y) * 0.5f;
+            if (Mathf.Abs(deltaX) > 0.001f || Mathf.Abs(deltaY) > 0.001f)
+                tab.position += new Vector3(deltaX, deltaY, 0f);
+            return true;
+        }
+    }
+
+    class VneiHoverRefresh : MonoBehaviour, IPointerEnterHandler
+    {
+        internal Component display;
+        public void OnPointerEnter(PointerEventData eventData) { VneiCompatibility.Refresh(display); }
     }
 
     // Bind each visible Marketplace row to PoV's native item tooltip. The
@@ -2716,17 +2976,13 @@ namespace PoVLevelbound
         }
     }
 
-    // Marketplace removes the local currency immediately before sending its
-    // purchase RPC. The client prefix prevents that loss in normal play; the
-    // server prefix remains authoritative and rejects forged/direct requests.
+    // The client checks the level before Marketplace removes local currency.
+    // Direct requests from modified clients are not validated by Levelbound.
     class MarketplacePurchasePatch
     {
         static FieldInfo currentBuyData;
         static FieldInfo buyTab;
-        static FieldInfo marketContext;
-        static MethodInfo getSlotById;
         static PropertyInfo clientItemPrefab;
-        static PropertyInfo slotItemPrefab;
 
         static bool ClientBuyPrefix()
         {
@@ -2786,42 +3042,6 @@ namespace PoVLevelbound
                 tooltip.m_text = Localization.instance == null ? tooltipText : Localization.instance.Localize(tooltipText);
         }
 
-        static bool ServerBuyPrefix(long sender, ZPackage data)
-        {
-            if (Plugin.Instance == null || data == null)
-                return true;
-            int slotId;
-            try
-            {
-                slotId = new ZPackage(data.GetArray()).ReadInt();
-            }
-            catch
-            {
-                return true;
-            }
-            Type database = AccessTools.TypeByName("Marketplace.DB.DB/Marketplace_Context_LiteDB");
-            if (database == null)
-                return true;
-            if (marketContext == null)
-                marketContext = AccessTools.Field(database, "_context");
-            object context = marketContext == null ? null : marketContext.GetValue(null);
-            if (context == null)
-                return true;
-            if (getSlotById == null)
-                getSlotById = AccessTools.Method(context.GetType(), "GetSlotByID");
-            object slot = getSlotById == null ? null : getSlotById.Invoke(context, new object[] { slotId });
-            if (slot == null)
-                return true;
-            if (slotItemPrefab == null)
-                slotItemPrefab = AccessTools.Property(slot.GetType(), "ItemPrefab");
-            string prefab = slotItemPrefab == null ? null : slotItemPrefab.GetValue(slot, null) as string;
-            Player player = Player.GetPlayer(sender);
-            int requirement;
-            if (player == null || !Plugin.Instance.MarketplaceItemLocked(prefab, player, out requirement))
-                return true;
-            Plugin.Instance.Tell(player, requirement);
-            return false;
-        }
     }
 
     [HarmonyPatch(typeof(Humanoid), "Pickup")]

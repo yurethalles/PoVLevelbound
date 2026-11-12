@@ -1,10 +1,10 @@
 {
     "name": "PoVLevelbound",
-    "version_number": "1.0.4",
+    "version_number": "1.0.6",
     "website_url": "",
     "description": "Links items, equipment, building pieces, world resources, and boss altars to the player's Path of Valheiman level.",
     "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2360",
-    "treextr-PathOfValheiman-6.0.8"
+    "treextr-PathOfValheiman-6.0.9"
     ]
 }

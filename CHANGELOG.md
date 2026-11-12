@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.6 — November 11, 2026
+
+- Added a synchronized option to prevent new Altars of Power and block offerings at existing ones. Previously accumulated monster power can still be reset at an altar.
+
+## 1.0.5 — November 11, 2026
+
+- Fixed client-side administrator bypass to use the status validated by the server.
+- Added rate-limited administrator bypass details to diagnostic logging.
+- Kept Marketplace level checks on the client before currency is deducted.
+- Made Marketplace purchase and chest swap restrictions respect the pickup setting.
+- Added level requirements to VNEI item and building-piece tooltips.
+- Aligned the VNEI crafting tab with the Path of Valheiman interface.
+- Reduced optional integration lookup overhead and repeated VNEI tab repositioning.
+
 ## 1.0.4 — November 11, 2026
 
 - Fixed administrator bypass checks for remote players on dedicated servers.
