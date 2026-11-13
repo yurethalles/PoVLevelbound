@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7 — November 13, 2026
+
+- Updated the default biome levels for Ocean to 77, AshLands to 160, and Deep North to 190. Existing configurations keep their saved values.
+
 ## 1.0.6 — November 11, 2026
 
 - Added a synchronized option to prevent new Altars of Power and block offerings at existing ones. Previously accumulated monster power can still be reset at an altar.

@@ -12,9 +12,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
-[assembly: AssemblyVersion("1.0.6.0")]
-[assembly: AssemblyFileVersion("1.0.6.0")]
-[assembly: AssemblyInformationalVersion("1.0.6")]
+[assembly: AssemblyVersion("1.0.7.0")]
+[assembly: AssemblyFileVersion("1.0.7.0")]
+[assembly: AssemblyInformationalVersion("1.0.7")]
 
 namespace PoVLevelbound
 {
@@ -24,7 +24,7 @@ namespace PoVLevelbound
     {
         public const string Guid = "Dorn.PoVLevelbound",
             Name = "PoV Levelbound",
-            Version = "1.0.6";
+            Version = "1.0.7";
         internal const string BlockedRpc = "PoVLevelbound_Blocked";
         const string SyncedBiomesKey = "biomas.yml";
         const string SyncedMaterialsKey = "materiais.yml";
@@ -737,9 +737,9 @@ namespace PoVLevelbound
             AddGlobalLevel("Mountain", Heightmap.Biome.Mountain, 77);
             AddGlobalLevel("Plains", Heightmap.Biome.Plains, 97);
             AddGlobalLevel("Mistlands", Heightmap.Biome.Mistlands, 130);
-            AddGlobalLevel("Ocean", Heightmap.Biome.Ocean, 130);
-            AddGlobalLevel("AshLands", Heightmap.Biome.AshLands, 181);
-            AddGlobalLevel("DeepNorth", Heightmap.Biome.DeepNorth, 200);
+            AddGlobalLevel("Ocean", Heightmap.Biome.Ocean, 77);
+            AddGlobalLevel("AshLands", Heightmap.Biome.AshLands, 160);
+            AddGlobalLevel("DeepNorth", Heightmap.Biome.DeepNorth, 190);
             RemoveLegacyConfig();
             Sync.AddLockingConfigEntry(locked);
         }

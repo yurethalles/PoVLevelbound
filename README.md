@@ -38,11 +38,11 @@ Clients and server must use the same Path of Valheiman version.
 | Mountain | 77 |
 | Plains | 97 |
 | Mistlands | 130 |
-| Ocean | 130 |
-| AshLands | 181 |
-| Deep North | 200 |
+| Ocean | 77 |
+| AshLands | 160 |
+| Deep North | 190 |
 
-These values are defaults only and can be changed in the server configuration file.
+These values are defaults only and can be changed in the server configuration file. Existing configurations retain their saved values; update them manually to use the new defaults.
 
 ## Installation
 
